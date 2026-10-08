@@ -1,49 +1,13 @@
 # Capital Bikeshare Demand Forecasting with MLflow
 
-## Project Overview
+This project predicts **daily bike rental demand for the next day** using historical Capital Bikeshare data. It compares a simple baseline with Linear Regression and Random Forest, while using **MLflow** to track experiments, compare metrics, and register a selected model.
 
-This project predicts **daily bike rental demand** for Capital Bikeshare in Washington, D.C. The goal is to estimate tomorrow's total rentals using information available the previous evening, helping operations teams plan staffing and fleet capacity.
-
-The project compares two regression models against a simple benchmark and uses **MLflow** for experiment tracking, model comparison, and model versioning.
-
-## Dataset
-
-The [UCI Bike Sharing Dataset](https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset) contains Capital Bikeshare rental records from 2011–2012:
-
-- `day.csv`: 731 daily observations (**used for modeling**).
-- `hour.csv`: 17,379 hourly observations (included for reference, not used).
-- `Readme.txt`: original dataset description and variable definitions.
-
-The prediction target is `cnt`, the total number of daily rentals.
-
-### Features
-
-| Feature | Description |
-| --- | --- |
-| `season` | Season of the forecast day |
-| `mnth` | Month of the forecast day |
-| `weekday` | Day of the week |
-| `holiday` | Holiday indicator |
-| `workingday` | Working-day indicator |
-| `yesterday_cnt` | Rental count from the previous day (lag 1) |
-| `last_week_cnt` | Rental count from seven days earlier (lag 7) |
-
-Observed weather fields are excluded because tomorrow's actual weather is unavailable the previous evening. The target's same-day components (`casual` and `registered`) are also excluded to prevent data leakage.
-
-## Models
-
-| Script | Approach | Training required? |
-| --- | --- | --- |
-| `baseline.py` | Predict tomorrow's rentals using yesterday's count | No |
-| `linear_regression.py` | Linear Regression | Yes |
-| `random_forest.py` | Random Forest Regressor | Yes |
-
-`prepare_data.py` handles shared preprocessing, lag-feature creation, and a chronological 80/20 train/test split. All three approaches are evaluated on the same test period using **MAE** and **RMSE**.
+The forecast is intended to be made the previous evening, so model inputs are limited to calendar information and rental counts already known at that time.
 
 ## Project Structure
 
 ```text
-Bike-Sharing-MLflow/
+mlflow-lab/
 ├── data/
 │   ├── day.csv
 │   ├── hour.csv
@@ -57,23 +21,17 @@ Bike-Sharing-MLflow/
 └── .gitignore
 ```
 
-## Getting Started
+Only `data/day.csv` is used for modelling. `hour.csv` is included as part of the original dataset but is not needed for this daily forecasting task.
 
-### 1. Clone and install dependencies
+## Setup
+
+From the project root, install dependencies:
 
 ```bash
-git clone <YOUR_REPOSITORY_URL>
-cd Bike-Sharing-MLflow
-python -m venv .venv
-source .venv/bin/activate  # macOS / Linux
 pip install -r requirements.txt
 ```
 
-On Windows, activate the virtual environment with `.venv\Scripts\activate`.
-
-### 2. Start the MLflow tracking server
-
-From the project root, run:
+Create a local folder for MLflow storage and start the server:
 
 ```bash
 mkdir -p mlflow_storage
@@ -83,11 +41,103 @@ mlflow server \
   --port 5000
 ```
 
-Open **http://127.0.0.1:5000** to access the MLflow UI. Keep this terminal running. The SQLite database and model artifacts are stored locally in `mlflow_storage/`.
+Keep this terminal running. Open **http://127.0.0.1:5000** in your browser. Use a **second terminal**, from the project root, for the Python commands below.
 
-### 3. Run the experiments
+> The scripts connect to `http://127.0.0.1:5000` and use the MLflow experiment `Bike_Sharing_Forecasting`.
 
-Open a second terminal in the project root, activate the same environment, and execute:
+## Step 1 — Prepare the Data
+
+**Run:** `prepare_data.py`
+
+```bash
+python prepare_data.py
+```
+
+This script:
+
+- Loads `data/day.csv` and sorts observations by date.
+- Creates `yesterday_cnt` (previous day's rentals) and `last_week_cnt` (rentals seven days earlier).
+- Uses calendar features (`season`, `mnth`, `weekday`, `holiday`, `workingday`) together with these two lag features.
+- Drops rows without the required historical counts.
+- Splits the data chronologically into **80% training** and **20% testing**.
+- Prints the dataset shapes and the training/testing date ranges.
+
+**Output:** The processed data is returned by `load_data()` for use in the other scripts; this step does not create a separate processed CSV or MLflow run.
+
+## Step 2 — Evaluate the Baseline
+
+**Run:** `baseline.py`
+
+```bash
+python baseline.py
+```
+
+The baseline predicts each day's rental count using **the previous day's actual rentals**:
+
+```text
+predicted_count_today = actual_count_yesterday
+```
+
+No model fitting is required. The script evaluates the baseline on the test period using **MAE** and **RMSE**, prints both scores, and logs a run named `Baseline_Yesterday` in MLflow.
+
+**Check in MLflow UI:** Open the `Bike_Sharing_Forecasting` experiment and find the `Baseline_Yesterday` run. Its metrics provide the benchmark that trained models should beat.
+
+## Step 3 — Train Linear Regression
+
+**Run:** `linear_regression.py`
+
+```bash
+python linear_regression.py
+```
+
+This script loads the same training and testing data, fits a Linear Regression model, makes predictions on the test period, and calculates **MAE** and **RMSE**.
+
+**Check in MLflow UI:** Find the `Linear_Regression` run. It records the model parameters, input features, training/testing periods, evaluation metrics, and the saved model artifact.
+
+## Step 4 — Train Random Forest
+
+**Run:** `random_forest.py`
+
+```bash
+python random_forest.py
+```
+
+This script trains a Random Forest regressor on the same split, initially using `n_estimators=100`, `max_depth=10`, and `random_state=42`. It evaluates predictions with **MAE** and **RMSE**.
+
+**Check in MLflow UI:** Find the `Random_Forest` run. As with Linear Regression, its parameters, features, data periods, metrics, and model artifact are recorded. You can change model settings and rerun the script to create another experiment run.
+
+## Step 5 — Compare Experiments in MLflow UI
+
+1. Open **http://127.0.0.1:5000**.
+2. Select the **`Bike_Sharing_Forecasting`** experiment.
+3. Find the three runs: `Baseline_Yesterday`, `Linear_Regression`, and `Random_Forest`.
+4. Select the runs and use the comparison view to inspect **MAE** and **RMSE** (lower is better).
+5. Open individual runs to review their **Parameters**, **Metrics**, **Artifacts**, and **Run ID**.
+
+All three runs use the same test period, making the error scores directly comparable. The baseline has no trained model artifact because it uses a fixed forecasting rule.
+
+## Step 6 — Register a Selected Model
+
+After comparing the results, register a trained model **only if it improves on the baseline** on the chosen evaluation metric.
+
+1. Open the winning **Linear Regression** or **Random Forest** run in MLflow UI.
+2. Locate the logged model and choose **Register Model** (the exact UI wording may vary by MLflow version).
+3. Create a registered model named `Capital_Bikeshare_Demand`, or select that name if it already exists.
+4. Confirm that a model **version** was created and that it links back to the source **Run ID**.
+
+A registered model version can later be retrieved using a URI such as:
+
+```python
+import mlflow.sklearn
+
+model = mlflow.sklearn.load_model("models:/Capital_Bikeshare_Demand/1")
+```
+
+Replace `1` with the actual registered version. Registration is **not** the same as deploying the model.
+
+## Quick Run Order
+
+With the MLflow server already running in another terminal:
 
 ```bash
 python prepare_data.py
@@ -96,31 +146,16 @@ python linear_regression.py
 python random_forest.py
 ```
 
-The scripts log runs to the `Bike_Sharing_Forecasting` experiment at `http://127.0.0.1:5000`.
+Then open the MLflow UI to compare runs and register a selected model.
 
-### 4. Compare results in MLflow
+## Dataset and Forecasting Limitations
 
-1. Open the **Bike_Sharing_Forecasting** experiment.
-2. Select the Baseline, Linear Regression, and Random Forest runs.
-3. Compare MAE and RMSE (lower is better).
-4. Inspect parameters, feature lists, training/test periods, artifacts, and Run IDs.
-5. If a trained model improves on the baseline, register it in the **Model Registry** under a name such as `Capital_Bikeshare_Demand` to create a retrievable version linked to its source run.
+The dataset contains Capital Bikeshare rentals from **2011–2012**, aggregated by day (`day.csv`) and hour (`hour.csv`). The target is `cnt`, the total daily rental count. The original dataset documentation is included in `data/Readme.txt`.
 
-> The baseline is a prediction rule rather than a fitted estimator, so it is logged as an MLflow run without a trained model artifact.
+Actual weather observed on the target day (`temp`, `atemp`, `hum`, `windspeed`, `weathersit`) is **not used**, because it would not be available the previous evening. Forecast weather could be added in a future version if historical forecasts were available.
 
-## MLflow Tracking
+This project is an initial experiment-tracking workflow. For more rigorous model selection, use chronological **train/validation/test** splits or rolling-origin validation, and reserve an untouched test period for the final baseline comparison. Categorical calendar features can also be encoded more appropriately for Linear Regression in a future iteration.
 
-Each model run records its settings, features, data periods, and evaluation metrics. Trained models are saved as MLflow model artifacts. The Model Registry can then be used to manage named model versions and trace them back to the training runs that produced them.
+## Reference
 
-## Limitations and Future Improvements
-
-- The current chronological 80/20 split is suitable for an initial demonstration. For model selection and tuning, use separate training, validation, and final test periods or rolling-origin validation.
-- Calendar categories in Linear Regression can be encoded with one-hot encoding instead of treating their numeric codes as continuous quantities.
-- Weather forecasts available the previous evening could be added in future work, but observed next-day weather must not be used as a predictor.
-- The dataset covers 2011–2012 and does not represent current operating conditions.
-
-## Dataset Attribution
-
-Fanaee-T, H., & Gama, J. (2013). *Event labeling combining ensemble detectors for anomaly detection*. Progress in Artificial Intelligence. https://doi.org/10.1007/s13748-013-0040-3
-
-Dataset source: [UCI Machine Learning Repository — Bike Sharing](https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset).
+Fanaee-T, H., & Gama, J. (2013). *Event labeling combining ensemble detectors and background knowledge*. Progress in Artificial Intelligence. https://doi.org/10.1007/s13748-013-0040-3
