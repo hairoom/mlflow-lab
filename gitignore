@@ -1,0 +1,23 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# MLflow local metadata and artifacts
+mlflow_storage/
+mlruns/
+mlartifacts/
+mlflow.db
+*.db-shm
+*.db-wal
+
+# Local settings
+.env
+.DS_Store
+.idea/
+.vscode/
