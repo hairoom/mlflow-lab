@@ -12,10 +12,12 @@ mlflow-lab/
 │   ├── day.csv
 │   ├── hour.csv
 │   └── Readme.txt
-├── prepare_data.py
-├── baseline.py
-├── linear_regression.py
-├── random_forest.py
+├── src/
+│   ├── prepare_data.py
+│   ├── baseline.py
+│   └── linear_regression.py
+│   └── random_forest.py
+│   └── select_champion.py
 ├── README.md
 ├── requirements.txt
 └── .gitignore
@@ -117,9 +119,17 @@ This script trains a Random Forest regressor on the same split, initially using 
 All three runs use the same test period, making the error scores directly comparable. The baseline has no trained model artifact because it uses a fixed forecasting rule.
 
 ## Step 6 — Register a Selected Model
-
 After comparing the results, register a trained model **only if it improves on the baseline** on the chosen evaluation metric.
 
+
+### Use Python script
+
+**Run:** `select_champion.py`
+
+```bash
+python select_champion.py
+```
+### (Optional) Use MLflow UI
 1. Open the winning **Linear Regression** or **Random Forest** run in MLflow UI.
 2. Locate the logged model and choose **Register Model** (the exact UI wording may vary by MLflow version).
 3. Create a registered model named `Capital_Bikeshare_Demand`, or select that name if it already exists.
@@ -144,6 +154,7 @@ python prepare_data.py
 python baseline.py
 python linear_regression.py
 python random_forest.py
+python select_champion.py
 ```
 
 Then open the MLflow UI to compare runs and register a selected model.
